@@ -3,7 +3,7 @@ name: Update Exchange Rates
 on:
   schedule:
     # 每个工作日 北京时间 10:00 和 22:00 (UTC 2:00 和 14:00)
-    - cron: '0 2,14 * * 1-5'
+    - cron: '0 2 * * 1-5'
   workflow_dispatch: # 允许手动触发
 
 jobs:
