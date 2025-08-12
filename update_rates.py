@@ -160,3 +160,73 @@ class ExchangeRateUpdater:
 ### Excel可用格式（TSV）
 复制以下内容粘贴到Excel中：
 
+
+### 使用说明
+
+1. **Excel导入方式**：
+   - 方法一：直接复制上述TSV数据粘贴到Excel
+   - 方法二：Excel → 数据 → 获取数据 → 来自Web → 输入CSV文件链接
+
+2. **CSV文件直链**：
+
+
+3. **自动刷新设置**：
+- 在Excel中设置每30分钟自动刷新一次
+- 数据源每个工作日10:00和22:00自动更新
+
+### 汇率说明
+
+- 数据来源：多个权威汇率API
+- 更新频率：每个工作日两次（北京时间10:00, 22:00）
+- 精度：四位小数
+- 基准货币：人民币(CNY)、港币(HKD)、美元(USD)、欧元(EUR)、英镑(GBP)
+
+### 技术实现
+
+- 自动化平台：GitHub Actions
+- 数据处理：Python + Pandas
+- 存储格式：CSV, JSON, Markdown
+
+---
+*本数据仅供参考，实际交易请以银行牌价为准*
+"""
+     
+     with open('README.md', 'w', encoding='utf-8') as f:
+         f.write(readme_content)
+     print("README file updated successfully")
+ 
+ def get_repo_info(self):
+     """获取仓库信息"""
+     try:
+         # 从GitHub Actions环境变量获取
+         import os
+         repo = os.environ.get('GITHUB_REPOSITORY', 'your-username/exchange-rates-auto')
+         return repo
+     except:
+         return 'your-username/exchange-rates-auto'
+ 
+ def run_update(self):
+     """执行完整更新流程"""
+     try:
+         print("Starting exchange rate update...")
+         
+         # 创建汇率矩阵
+         matrix, base_rates = self.create_exchange_matrix()
+         
+         # 保存各种格式
+         self.save_to_csv(matrix)
+         self.save_to_json(base_rates)
+         self.update_readme(matrix)
+         
+         print("Exchange rates updated successfully!")
+         return True
+         
+     except Exception as e:
+         print(f"Error updating exchange rates: {e}")
+         return False
+
+if __name__ == "__main__":
+ updater = ExchangeRateUpdater()
+ success = updater.run_update()
+ exit(0 if success else 1)
+
