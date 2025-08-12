@@ -1,0 +1,40 @@
+name: Update Exchange Rates
+
+on:
+  schedule:
+    # 每个工作日 北京时间 10:00 和 22:00 (UTC 2:00 和 14:00)
+    - cron: '0 2,14 * * 1-5'
+  workflow_dispatch: # 允许手动触发
+
+jobs:
+  update-rates:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        
+    - name: Run update script
+      run: |
+        python update_rates.py
+        
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add -A
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "Auto update exchange rates - $(date)"
+          git push
+        fi
