@@ -1,23 +1,24 @@
-# Exchange Rates Auto Update
+# 汇率数据自动更新（以美元为基准）
 
-Updated: 2025-08-13 06:46:04
+**更新时间**：2025-08-13 15:03:09（北京时间）
 
-## Excel Data (TSV Format)
+## Excel 表格（制表符分隔，复制粘贴）
 
-Currency	CNY	HKD	USD	EUR	GBP
-CNY		1.0989	0.1392	0.1198	0.1039
-HKD	0.9100		0.1267	0.1090	0.0946
-USD	7.1860	7.8945		0.8577	0.7460
-EUR	8.3430	9.1703	1.1660		0.8700
-GBP	9.6250	10.5769	1.3404	1.1494	
+Currency	USD	CNY	HKD	EUR	GBP
+USD		7.1900	7.8500	0.8580	0.7410
+CNY	0.1391		1.0918	0.1193	0.1031
+HKD	0.1274	0.9159		0.1093	0.0944
+EUR	1.1655	8.3800	9.1492		0.8636
+GBP	1.3495	9.7031	10.5938	1.1579	
 
-## CSV Link
+## CSV 文件直链
 
 https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv
 
-## Instructions
+### 说明
+- 以美元（USD）为基准货币
+- 所有交叉汇率通过美元计算
+- 数据来源：ExchangeRate-API + 备用数据
 
-1. Copy the TSV data above and paste into Excel
-2. Or use the CSV link in Excel Power Query
-
-Data for reference only
+---
+*数据仅供参考*
