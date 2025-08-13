@@ -1,56 +1,108 @@
-import pandas as pd
-from datetime import datetime
+import requests
+import csv
 import json
+from datetime import datetime, timezone, timedelta
 
-print("Starting update...")
+# 目标货币顺序
+CURRENCIES = ['USD', 'CNY', 'HKD', 'EUR', 'GBP']
 
-# Exchange rates data
-data = [
-    ["Currency", "CNY", "HKD", "USD", "EUR", "GBP"],
-    ["CNY", "", "1.0989", "0.1392", "0.1198", "0.1039"],
-    ["HKD", "0.9100", "", "0.1267", "0.1090", "0.0946"], 
-    ["USD", "7.1860", "7.8945", "", "0.8577", "0.7460"],
-    ["EUR", "8.3430", "9.1703", "1.1660", "", "0.8700"],
-    ["GBP", "9.6250", "10.5769", "1.3404", "1.1494", ""]
-]
+# Wise 公共接口模板
+WISE_API = 'https://wise.com/rates/live?source={source}&target={target}'
 
-# Save CSV
-df = pd.DataFrame(data[1:], columns=data[0])
-df.to_csv("exchange_rates.csv", index=False)
-print("CSV saved")
+def fetch_wise_rate(source: str, target: str) -> float:
+    url = WISE_API.format(source=source, target=target)
+    resp = requests.get(url, timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    return round(float(data['rate']), 4)
 
-# Save JSON  
-rates_data = {
-    "USD_CNY": 7.1860,
-    "EUR_CNY": 8.3430,
-    "GBP_CNY": 9.6250,
-    "HKD_CNY": 0.9100,
-    "last_updated": datetime.now().isoformat()
-}
+def fetch_base_rates() -> dict:
+    """
+    以 USD 为基准获取其他货币汇率：USD→CNY、USD→HKD、USD→EUR、USD→GBP
+    返回字典 { 'USD_CNY': 7.1860, ... }
+    """
+    pairs = [('USD', 'CNY'), ('USD', 'HKD'), ('USD', 'EUR'), ('USD', 'GBP')]
+    base = {}
+    for src, tgt in pairs:
+        key = f'{src}_{tgt}'
+        base[key] = fetch_wise_rate(src, tgt)
+    return base
 
-with open("exchange_rates.json", "w") as f:
-    json.dump(rates_data, f, indent=2)
-print("JSON saved")
+def build_matrix(base: dict) -> list:
+    """
+    构建以 USD 为基准的全交叉汇率矩阵：
+    - 首行首列为 USD, CNY, HKD, EUR, GBP
+    - USD→X 用 base ；X→Y 用 (1 / USD→X) * USD→Y
+    """
+    fmt = lambda x: f'{x:.4f}'
+    # 取基本汇率
+    usd_cny = base['USD_CNY']
+    usd_hkd = base['USD_HKD']
+    usd_eur = base['USD_EUR']
+    usd_gbp = base['USD_GBP']
 
-# Create simple README
-readme_content = "# Exchange Rates Auto Update\n\n"
-readme_content += "Updated: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n\n"
-readme_content += "## Excel Data (TSV Format)\n\n"
-readme_content += "Currency\tCNY\tHKD\tUSD\tEUR\tGBP\n"
-readme_content += "CNY\t\t1.0989\t0.1392\t0.1198\t0.1039\n"
-readme_content += "HKD\t0.9100\t\t0.1267\t0.1090\t0.0946\n"
-readme_content += "USD\t7.1860\t7.8945\t\t0.8577\t0.7460\n"
-readme_content += "EUR\t8.3430\t9.1703\t1.1660\t\t0.8700\n"
-readme_content += "GBP\t9.6250\t10.5769\t1.3404\t1.1494\t\n\n"
-readme_content += "## CSV Link\n\n"
-readme_content += "https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv\n\n"
-readme_content += "## Instructions\n\n"
-readme_content += "1. Copy the TSV data above and paste into Excel\n"
-readme_content += "2. Or use the CSV link in Excel Power Query\n\n"
-readme_content += "Data for reference only"
+    # 交叉率计算函数
+    def rate(src: str, tgt: str) -> str:
+        if src == tgt:
+            return ''
+        if src == 'USD':
+            return fmt(base[f'USD_{tgt}'])
+        if tgt == 'USD':
+            return fmt(1 / base[f'USD_{src}'])
+        # src→tgt = (src→USD) * (USD→tgt)
+        src_usd = 1 / base[f'USD_{src}']
+        usd_tgt = base[f'USD_{tgt}']
+        return fmt(src_usd * usd_tgt)
 
-with open("README.md", "w", encoding="utf-8") as f:
-    f.write(readme_content)
-print("README updated")
+    matrix = [['Currency'] + CURRENCIES]
+    for src in CURRENCIES:
+        row = [src] + [rate(src, tgt) for tgt in CURRENCIES]
+        matrix.append(row)
+    return matrix
 
-print("All files updated successfully!")
+def save_csv(matrix: list):
+    with open('exchange_rates.csv', 'w', newline='', encoding='utf-8') as f:
+        csv.writer(f).writerows(matrix)
+
+def save_json(base: dict):
+    data = {
+        'base_rates': base,
+        'last_updated': datetime.now(timezone(timedelta(hours=8))).isoformat()
+    }
+    with open('exchange_rates.json', 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def update_readme(matrix: list):
+    now = datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S')
+    lines = [
+        '# 汇率数据自动更新',
+        '',
+        f'**更新时间**：{now}（北京时间）',
+        '',
+        '## Excel 表格（制表符分隔，复制粘贴）',
+        ''
+    ]
+    for row in matrix:
+        lines.append('\t'.join(row))
+    lines += [
+        '',
+        '## CSV 文件直链',
+        '',
+        'https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv',
+        '',
+        '---',
+        '*数据仅供参考*'
+    ]
+    with open('README.md', 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+
+def main():
+    base = fetch_base_rates()
+    matrix = build_matrix(base)
+    save_csv(matrix)
+    save_json(base)
+    update_readme(matrix)
+    print('Exchange rates updated successfully!')
+
+if __name__ == '__main__':
+    main()
