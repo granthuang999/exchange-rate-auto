@@ -23,7 +23,7 @@ def main():
     
     # 保存CSV
     df = pd.DataFrame(matrix[1:], columns=matrix[0])
-    df.to_csv('exchange_rates.csv', index=False```   
+    df.to_csv('exchange_rates.csv', index=False   
     # 保存JSON
     beijing_time = datetime.now(timezone(timedelta(hours=8)))
     data = {
