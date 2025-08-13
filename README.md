@@ -1,2 +1,23 @@
-# exchange-rate-auto
-auto update the exchage rate for personal using purpose 
+# Exchange Rates Auto Update
+
+Updated: 2025-08-13 06:46:04
+
+## Excel Data (TSV Format)
+
+Currency	CNY	HKD	USD	EUR	GBP
+CNY		1.0989	0.1392	0.1198	0.1039
+HKD	0.9100		0.1267	0.1090	0.0946
+USD	7.1860	7.8945		0.8577	0.7460
+EUR	8.3430	9.1703	1.1660		0.8700
+GBP	9.6250	10.5769	1.3404	1.1494	
+
+## CSV Link
+
+https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv
+
+## Instructions
+
+1. Copy the TSV data above and paste into Excel
+2. Or use the CSV link in Excel Power Query
+
+Data for reference only
