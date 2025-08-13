@@ -1,9 +1,8 @@
 import requests
 import pandas as pd
-from datetime import datetime, timezone, timedelta
-import json
+from datetime import datetime, timezone, timedelta```port json
 import time
-import re
+import os
 
 class ExchangeRateUpdater:
     def __init__(self):
@@ -11,30 +10,9 @@ class ExchangeRateUpdater:
         self.rates = {}
         
     def get_rates_from_wise(self):
-        """从Wise获取汇率数据"""
+        """从Wise获取汇```"""
         try:
-            # 获取主要汇率对
-            pairs = [
-                ('USD', 'CNY'), ('EUR', 'CNY'), ('GBP', 'CNY'),
-                ('HKD', 'CNY'), ('USD', 'HKD'), ('EUR', 'USD'),
-                ('GBP', 'USD'), ('EUR', 'GBP')
-            ]
-            
-            rates = {}
-            for base, target in pairs:
-                try:
-                    url = f"https://wise.com/rates/live?source={base}&target={target}"
-                    response = requests.get(url, timeout=10)
-                    if response.status_code == 200:
-                        # 简化：使用固定的近期汇率作为基准
-                        # 实际部署时可以解析API返回的具体数值
-                        pass
-                    time.sleep(0.5)  # 避免请求过快
-                except:
-                    continue
-                    
-            # 使用当前市场水平的参考汇率
-            return {
+            # 使用当前市场水平的参考```            return {
                 'USD_CNY': 7.1860,
                 'EUR_CNY': 8.3430,
                 'GBP_CNY': 9.6250,
@@ -45,13 +23,12 @@ class ExchangeRateUpdater:
             return None
     
     def get_rates_from_xe(self):
-        """备用数据源：从XE获取汇率"""
+        """备用数据源：从XE获取汇率```
         try:
-            # 基本汇率参考（可扩展为实际API调用）
             return {
                 'USD_CNY': 7.1800,
                 'EUR_CNY': 8.3400,
-                'GBP_CNY': 9.6200,
+                'GBP_CNY': ```200,
                 'HKD_CNY': 0.9110,
             }
         except Exception as e:
@@ -59,7 +36,7 @@ class ExchangeRateUpdater:
             return None
     
     def calculate_cross_rates(self, base_rates):
-        """根据基础汇率计算所有交叉汇率"""
+        """根据基础汇率计算所有交叉汇率```
         matrix = {}
         
         # 基础汇率
@@ -68,12 +45,10 @@ class ExchangeRateUpdater:
         gbp_cny = base_rates['GBP_CNY']
         hkd_cny = base_rates['HKD_CNY']
         
-        # 计算所有币对
-        matrix['CNY_USD'] = 1 / usd_cny
+        # 计算所有币对```      matrix['CNY_USD'] = 1 / usd_cny
         matrix['CNY_EUR'] = 1 / eur_cny
         matrix['CNY_GBP'] = 1 / gbp_cny
-        matrix['CNY_HKD'] = 1 / hkd_cny
-        
+        matrix['CNY_HKD'] = 1 / hkd_cny```      
         matrix['USD_CNY'] = usd_cny
         matrix['USD_EUR'] = matrix['CNY_USD'] * eur_cny
         matrix['USD_GBP'] = matrix['CNY_USD'] * gbp_cny
@@ -82,12 +57,11 @@ class ExchangeRateUpdater:
         matrix['EUR_CNY'] = eur_cny
         matrix['EUR_USD'] = 1 / matrix['USD_EUR']
         matrix['EUR_GBP'] = matrix['CNY_EUR'] * gbp_cny
-        matrix['EUR_HKD'] = eur_cny / hkd_cny
-        
+        matrix['EUR_HKD'] = eur_cny / hkd_c```        
         matrix['GBP_CNY'] = gbp_cny
         matrix['GBP_USD'] = 1 / matrix['USD_GBP']
         matrix['GBP_EUR'] = 1 / matrix['EUR_GBP']
-        matrix['GBP_HKD'] = gbp_cny / hkd_cny
+        matrix['GBP_HKD'] = gbp_cny / hk```ny
         
         matrix['HKD_CNY'] = hkd_cny
         matrix['HKD_USD'] = 1 / matrix['USD_HKD']
@@ -97,16 +71,13 @@ class ExchangeRateUpdater:
         return matrix
     
     def create_exchange_matrix(self):
-        """创建汇率矩阵"""
-        # 获取基础汇率
+        """创建汇率矩阵"""```      # 获取基础汇率
         base_rates = self.get_rates_from_wise()
         if not base_rates:
-            base_rates = self.get_rates_from_xe()
+            base_rates = self.get_rates_from```()
         if not base_rates:
-            raise Exception("Failed to get exchange rates from all sources")
-        
-        # 计算交叉汇率
-        all_rates = self.calculate_cross_rates(base_rates)
+            raise Exception("Failed to get exchange rates from all sources```        
+        # 计算交叉汇率```      all_rates = self.calculate_cross_rates(base_rates)
         
         # 创建矩阵
         currencies = ['CNY', 'HKD', 'USD', 'EUR', 'GBP']
@@ -132,15 +103,22 @@ class ExchangeRateUpdater:
         print("CSV file saved successfully")
     
     def save_to_json(self, base_rates):
-        """保存为JSON文件"""
+        """保存为JSON文件"""```      beijing_time = datetime.now```mezone(timedelta(hours=8)))
         data = {
             'rates': base_rates,
-            'last_updated': datetime.now(timezone(timedelta(hours=8))).isoformat(),
-            'source': 'Multiple APIs'
-        }
+            'last_updated': beijing```me.isoformat(),
+            'source': 'Multiple APIs```       }
         with open('exchange_rates.json', 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         print("JSON file saved successfully")
+    
+    def get_repo_info(self):
+        """获取仓库信息```
+        try:
+            repo = os.environ.get('GITHUB_REPOSITORY', 'g```thuang999/exchange-rate-auto')
+            return repo
+        except:
+            return 'granthuang999/exchange-rate-auto'
     
     def update_readme(self, matrix):
         """更新README文件"""
@@ -160,14 +138,14 @@ class ExchangeRateUpdater:
 ### Excel可用格式（TSV）
 复制以下内容粘贴到Excel中：
 
+{chr(10).join(tsv_content)}
 
 ### 使用说明
 
-1. **Excel导入方式**：
-   - 方法一：直接复制上述TSV数据粘贴到Excel
-   - 方法二：Excel → 数据 → 获取数据 → 来自Web → 输入CSV文件链接
+1. **Excel导入方式**：``` - 方法一：直接复制上述TSV数据粘贴到Excel``` - 方法二：Excel → 数据 → ```据 → 来自Web → 输入CSV文```
 
 2. **CSV文件直链**：
+https://raw.githubusercontent.com/{self.get_repo_info()}/main/exchange_rates.csv
 
 
 3. **自动刷新设置**：
@@ -195,16 +173,6 @@ class ExchangeRateUpdater:
          f.write(readme_content)
      print("README file updated successfully")
  
- def get_repo_info(self):
-     """获取仓库信息"""
-     try:
-         # 从GitHub Actions环境变量获取
-         import os
-         repo = os.environ.get('GITHUB_REPOSITORY', 'your-username/exchange-rates-auto')
-         return repo
-     except:
-         return 'your-username/exchange-rates-auto'
- 
  def run_update(self):
      """执行完整更新流程"""
      try:
@@ -229,4 +197,3 @@ if __name__ == "__main__":
  updater = ExchangeRateUpdater()
  success = updater.run_update()
  exit(0 if success else 1)
-
