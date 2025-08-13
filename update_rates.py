@@ -32,12 +32,39 @@ with open("exchange_rates.json", "w") as f:
     json.dump(rates_data, f, indent=2)
 print("JSON saved")
 
-# Create README
-readme_text = """# Exchange Rates Auto Update
+# Create README content line by line
+readme_lines = []
+readme_lines.append("# Exchange Rates Auto Update")
+readme_lines.append("")
+readme_lines.append("## Latest Data")
+readme_lines.append("")
+readme_lines.append("Updated: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+readme_lines.append("")
+readme_lines.append("### For Excel (copy and paste):")
+readme_lines.append("")
+readme_lines.append("```
+readme_lines.append("Currency\tCNY\tHKD\tUSD\tEUR\tGBP")
+readme_lines.append("CNY\t\t1.0989\t0.1392\t0.1198\t0.1039")
+readme_lines.append("HKD\t0.9100\t\t0.1267\t0.1090\t0.0946")
+readme_lines.append("USD\t7.1860\t7.8945\t\t0.8577\t0.7460")
+readme_lines.append("EUR\t8.3430\t9.1703\t1.1660\t\t0.8700")
+readme_lines.append("GBP\t9.6250\t10.5769\t1.3404\t1.1494\t")
+readme_lines.append("```")
+readme_lines.append("")
+readme_lines.append("### CSV Link:")
+readme_lines.append("https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv")
+readme_lines.append("")
+readme_lines.append("### Instructions:")
+readme_lines.append("1. Copy the table above and paste into Excel")
+readme_lines.append("2. Or use the CSV link in Excel Data > Get Data > From Web")
+readme_lines.append("")
+readme_lines.append("---")
+readme_lines.append("*Data for reference only*")
 
-## Latest Data
+readme_content = "\n".join(readme_lines)
 
-Updated: """ + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + """
+with open("README.md", "w", encoding="utf-8") as f:
+    f.write(readme_content)
+print("README updated")
 
-### For Excel (copy and paste):
-
+print("All files updated successfully!")
