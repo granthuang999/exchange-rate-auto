@@ -1,191 +1,109 @@
+# update_rates.py  —— USD 基准 · Yahoo→Wise 双层数据源
+import yfinance as yf
 import requests
-import csv
-import json
+import csv, json
 from datetime import datetime, timezone, timedelta
-import time
 
-# 目标货币顺序
 CURRENCIES = ['USD', 'CNY', 'HKD', 'EUR', 'GBP']
+YF_TICKERS = {
+    'USD_CNY': 'USDCNY=X',
+    'USD_HKD': 'HKD=X',           # Yahoo 已固定为 1 HKD = ? USD，需要倒数处理
+    'USD_EUR': 'EURUSD=X',
+    'USD_GBP': 'GBPUSD=X'
+}
+WISE_TEMPLATE = 'https://wise.com/rates/live?source=USD&target={}'
 
-def fetch_wise_rate(source: str, target: str) -> float:
-    """
-    从多个源获取汇率，带错误处理
-    """
+# ---------- 1. Yahoo Finance ----------
+def fetch_yahoo_rates() -> dict:
+    rates = {}
+    for k, ticker in YF_TICKERS.items():
+        try:
+            data = yf.Ticker(ticker)
+            price = data.fast_info['lastPrice']
+            if price and price > 0:
+                # HKD=X 返回 1 HKD = ? USD，需倒数
+                rates[k] = round(1 / price, 6) if k == 'USD_HKD' else round(price, 6)
+        except Exception:
+            pass
+    return rates
+
+# ---------- 2. Wise 备选（逐个币种） ----------
+def fetch_wise_rate(target: str) -> float:
     try:
-        # 尝试方法1: Wise converter page
-        url = f"https://wise.com/gb/currency-converter/{source.lower()}-to-{target.lower()}-rate"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-        resp = requests.get(url, headers=headers, timeout=10)
-        
-        # 如果Wise不可用，使用备用方法
-        if resp.status_code != 200:
-            raise Exception("Wise API unavailable")
-            
-        # 解析可能需要从HTML中提取，这里用备用数据
-        raise Exception("Parse HTML needed")
-        
+        r = requests.get(WISE_TEMPLATE.format(target), timeout=10)
+        r.raise_for_status()
+        return round(float(r.json()['rate']), 6)
     except Exception:
-        # 备用：返回近期市场汇率作为基准
-        return get_fallback_rate(source, target)
+        return None
 
-def get_fallback_rate(source: str, target: str) -> float:
-    """
-    备用汇率数据（基于2025年8月市场水平）
-    """
-    # 以USD为基准的汇率表
-    usd_rates = {
-        'USD': 1.0,
-        'CNY': 7.1850,  # 1 USD = 7.1850 CNY
-        'HKD': 7.8500,  # 1 USD = 7.8500 HKD
-        'EUR': 0.8570,  # 1 USD = 0.8570 EUR
-        'GBP': 0.7460   # 1 USD = 0.7460 GBP
-    }
-    
-    if source == 'USD':
-        return usd_rates[target]
-    elif target == 'USD':
-        return 1.0 / usd_rates[source]
-    else:
-        # 交叉汇率：source → USD → target
-        source_to_usd = 1.0 / usd_rates[source]
-        usd_to_target = usd_rates[target]
-        return source_to_usd * usd_to_target
+# ---------- 3. 获取基础汇率 USD→X ----------
+def get_base_rates() -> dict:
+    base = fetch_yahoo_rates()
+    # 若某币种缺失则用 Wise
+    for tgt in ['CNY', 'HKD', 'EUR', 'GBP']:
+        key = f'USD_{tgt}'
+        if key not in base:
+            wise_rate = fetch_wise_rate(tgt)
+            if wise_rate:
+                base[key] = wise_rate
+    # 若仍有缺口则抛错并退出
+    missing = [k for k in ['USD_CNY', 'USD_HKD', 'USD_EUR', 'USD_GBP'] if k not in base]
+    if missing:
+        raise RuntimeError(f'基础汇率缺失：{missing}')
+    return base
 
-def fetch_live_rates() -> dict:
-    """
-    尝试获取实时汇率，失败则使用备用数据
-    """
-    try:
-        # 尝试从exchangerate-api获取（免费API）
-        api_url = "https://api.exchangerate-api.com/v4/latest/USD"
-        resp = requests.get(api_url, timeout=10)
-        
-        if resp.status_code == 200:
-            data = resp.json()
-            rates = data.get('rates', {})
-            
-            return {
-                'USD_CNY': rates.get('CNY', 7.1850),
-                'USD_HKD': rates.get('HKD', 7.8500),
-                'USD_EUR': rates.get('EUR', 0.8570),
-                'USD_GBP': rates.get('GBP', 0.7460)
-            }
-    except Exception as e:
-        print(f"Live API failed: {e}, using fallback rates")
-    
-    # 备用数据
-    return {
-        'USD_CNY': 7.1850,
-        'USD_HKD': 7.8500,
-        'USD_EUR': 0.8570,
-        'USD_GBP': 0.7460
-    }
+# ---------- 4. 构建交叉矩阵 ----------
+def build_matrix(b: dict) -> list:
+    u2cny, u2hkd, u2eur, u2gbp = b['USD_CNY'], b['USD_HKD'], b['USD_EUR'], b['USD_GBP']
+    fmt = lambda x: f'{x:.6f}'
+    def val(src, tgt):
+        if src == tgt: return ''
+        if src == 'USD': return fmt(b[f'USD_{tgt}'])
+        if tgt == 'USD': return fmt(1 / b[f'USD_{src}'])
+        return fmt((1 / b[f'USD_{src}']) * b[f'USD_{tgt}'])
+    m = [['Currency'] + CURRENCIES]
+    for s in CURRENCIES:
+        m.append([s] + [val(s, t) for t in CURRENCIES])
+    return m
 
-def build_matrix(base: dict) -> list:
-    """
-    构建以 USD 为基准的全交叉汇率矩阵
-    """
-    fmt = lambda x: f'{x:.4f}'
-    
-    # 基础汇率
-    usd_cny = base['USD_CNY']
-    usd_hkd = base['USD_HKD']
-    usd_eur = base['USD_EUR']
-    usd_gbp = base['USD_GBP']
-    
-    # 汇率查找表
-    rates_map = {
-        ('USD', 'CNY'): usd_cny,
-        ('USD', 'HKD'): usd_hkd,
-        ('USD', 'EUR'): usd_eur,
-        ('USD', 'GBP'): usd_gbp,
-        ('CNY', 'USD'): 1/usd_cny,
-        ('HKD', 'USD'): 1/usd_hkd,
-        ('EUR', 'USD'): 1/usd_eur,
-        ('GBP', 'USD'): 1/usd_gbp,
-        # 交叉汇率
-        ('CNY', 'HKD'): (1/usd_cny) * usd_hkd,
-        ('CNY', 'EUR'): (1/usd_cny) * usd_eur,
-        ('CNY', 'GBP'): (1/usd_cny) * usd_gbp,
-        ('HKD', 'CNY'): (1/usd_hkd) * usd_cny,
-        ('HKD', 'EUR'): (1/usd_hkd) * usd_eur,
-        ('HKD', 'GBP'): (1/usd_hkd) * usd_gbp,
-        ('EUR', 'CNY'): (1/usd_eur) * usd_cny,
-        ('EUR', 'HKD'): (1/usd_eur) * usd_hkd,
-        ('EUR', 'GBP'): (1/usd_eur) * usd_gbp,
-        ('GBP', 'CNY'): (1/usd_gbp) * usd_cny,
-        ('GBP', 'HKD'): (1/usd_gbp) * usd_hkd,
-        ('GBP', 'EUR'): (1/usd_gbp) * usd_eur,
-    }
-    
-    matrix = [['Currency'] + CURRENCIES]
-    
-    for src in CURRENCIES:
-        row = [src]
-        for tgt in CURRENCIES:
-            if src == tgt:
-                row.append('')  # 对角线为空
-            else:
-                rate = rates_map.get((src, tgt), 0)
-                row.append(fmt(rate))
-        matrix.append(row)
-    
-    return matrix
-
-def save_csv(matrix: list):
+# ---------- 5. 写文件 ----------
+def save_csv(matrix):
     with open('exchange_rates.csv', 'w', newline='', encoding='utf-8') as f:
         csv.writer(f).writerows(matrix)
 
-def save_json(base: dict):
-    data = {
-        'base_rates': base,
-        'last_updated': datetime.now(timezone(timedelta(hours=8))).isoformat(),
-        'source': 'ExchangeRate-API with USD base'
-    }
+def save_json(base):
     with open('exchange_rates.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+        json.dump(
+            {'base_rates': base,
+             'last_updated': datetime.now(timezone.utc).astimezone(
+                 timezone(timedelta(hours=8))).isoformat(),
+             'source': 'Yahoo Finance → Wise fallback'},
+            f, ensure_ascii=False, indent=2)
 
-def update_readme(matrix: list):
-    now = datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S')
+def save_readme(matrix):
+    ts = datetime.now(timezone.utc).astimezone(
+        timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S')
     lines = [
-        '# 汇率数据自动更新（以美元为基准）',
-        '',
-        f'**更新时间**：{now}（北京时间）',
-        '',
-        '## Excel 表格（制表符分隔，复制粘贴）',
-        ''
-    ]
-    for row in matrix:
-        lines.append('\t'.join(row))
-    lines += [
-        '',
-        '## CSV 文件直链',
-        '',
+        '# 汇率自动表（USD 基准）', '',
+        f'更新时间（北京时间）：{ts}', '',
+        '## 制表符格式，可粘贴 Excel', ''
+    ] + ['\t'.join(r) for r in matrix] + [
+        '', 'CSV：',
         'https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv',
-        '',
-        '### 说明',
-        '- 以美元（USD）为基准货币',
-        '- 所有交叉汇率通过美元计算',
-        '- 数据来源：ExchangeRate-API + 备用数据',
-        '',
-        '---',
-        '*数据仅供参考*'
+        '', '> 数据来源：先 Yahoo Finance，若失败则 Wise；无更多备用。',
+        ''
     ]
     with open('README.md', 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
 
+# ---------- 6. 主入口 ----------
 def main():
-    print("Fetching exchange rates...")
-    base = fetch_live_rates()
-    print(f"Base rates: {base}")
-    
+    base = get_base_rates()
     matrix = build_matrix(base)
     save_csv(matrix)
     save_json(base)
-    update_readme(matrix)
-    print('Exchange rates updated successfully!')
+    save_readme(matrix)
+    print('Update completed.')
 
 if __name__ == '__main__':
     main()
