@@ -1,109 +1,217 @@
-# update_rates.py  —— USD 基准 · Yahoo→Wise 双层数据源
-import yfinance as yf
 import requests
-import csv, json
+import csv
+import json
 from datetime import datetime, timezone, timedelta
+import time
 
 CURRENCIES = ['USD', 'CNY', 'HKD', 'EUR', 'GBP']
-YF_TICKERS = {
-    'USD_CNY': 'USDCNY=X',
-    'USD_HKD': 'HKD=X',           # Yahoo 已固定为 1 HKD = ? USD，需要倒数处理
-    'USD_EUR': 'EURUSD=X',
-    'USD_GBP': 'GBPUSD=X'
-}
-WISE_TEMPLATE = 'https://wise.com/rates/live?source=USD&target={}'
 
-# ---------- 1. Yahoo Finance ----------
+# ---------- 1. Yahoo Finance API (免费接口) ----------
 def fetch_yahoo_rates() -> dict:
+    """使用 Yahoo Finance 查询 API 获取汇率"""
     rates = {}
-    for k, ticker in YF_TICKERS.items():
+    symbols = {
+        'USD_CNY': 'USDCNY=X',
+        'USD_HKD': 'USDHKD=X', 
+        'USD_EUR': 'USDEUR=X',
+        'USD_GBP': 'USDGBP=X'
+    }
+    
+    for key, symbol in symbols.items():
         try:
-            data = yf.Ticker(ticker)
-            price = data.fast_info['lastPrice']
-            if price and price > 0:
-                # HKD=X 返回 1 HKD = ? USD，需倒数
-                rates[k] = round(1 / price, 6) if k == 'USD_HKD' else round(price, 6)
-        except Exception:
-            pass
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'chart' in data and data['chart']['result']:
+                    result = data['chart']['result'][0]
+                    if 'meta' in result and 'regularMarketPrice' in result['meta']:
+                        price = result['meta']['regularMarketPrice']
+                        if price and price > 0:
+                            rates[key] = round(price, 6)
+                            print(f"Yahoo {key}: {price}")
+            
+            time.sleep(0.2)  # 避免请求过快
+            
+        except Exception as e:
+            print(f"Yahoo {key} failed: {e}")
+            continue
+    
     return rates
 
-# ---------- 2. Wise 备选（逐个币种） ----------
+# ---------- 2. Wise API 备选 ----------
 def fetch_wise_rate(target: str) -> float:
+    """从 Wise 获取 USD 到目标货币的汇率"""
     try:
-        r = requests.get(WISE_TEMPLATE.format(target), timeout=10)
-        r.raise_for_status()
-        return round(float(r.json()['rate']), 6)
-    except Exception:
-        return None
+        url = f"https://wise.com/rates/live?source=USD&target={target}"
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if 'rate' in data:
+                rate = float(data['rate'])
+                print(f"Wise USD_{target}: {rate}")
+                return round(rate, 6)
+        
+    except Exception as e:
+        print(f"Wise USD_{target} failed: {e}")
+    
+    return None
 
-# ---------- 3. 获取基础汇率 USD→X ----------
+# ---------- 3. ExchangeRate-API 作为最后备选 ----------
+def fetch_exchangerate_api() -> dict:
+    """使用 ExchangeRate-API 获取基于 USD 的汇率"""
+    try:
+        url = "https://api.exchangerate-api.com/v4/latest/USD"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            rates = data.get('rates', {})
+            result = {}
+            
+            for target in ['CNY', 'HKD', 'EUR', 'GBP']:
+                if target in rates:
+                    result[f'USD_{target}'] = round(rates[target], 6)
+                    print(f"ExchangeRate-API USD_{target}: {rates[target]}")
+            
+            return result
+            
+    except Exception as e:
+        print(f"ExchangeRate-API failed: {e}")
+    
+    return {}
+
+# ---------- 4. 获取基础汇率 ----------
 def get_base_rates() -> dict:
+    """按优先级获取汇率：Yahoo -> Wise -> ExchangeRate-API"""
+    print("尝试从 Yahoo Finance 获取汇率...")
     base = fetch_yahoo_rates()
-    # 若某币种缺失则用 Wise
-    for tgt in ['CNY', 'HKD', 'EUR', 'GBP']:
-        key = f'USD_{tgt}'
+    
+    # 检查缺失的货币对，用 Wise 补充
+    missing = []
+    for target in ['CNY', 'HKD', 'EUR', 'GBP']:
+        key = f'USD_{target}'
         if key not in base:
-            wise_rate = fetch_wise_rate(tgt)
-            if wise_rate:
-                base[key] = wise_rate
-    # 若仍有缺口则抛错并退出
-    missing = [k for k in ['USD_CNY', 'USD_HKD', 'USD_EUR', 'USD_GBP'] if k not in base]
+            missing.append(target)
+    
     if missing:
-        raise RuntimeError(f'基础汇率缺失：{missing}')
+        print(f"Yahoo 缺失 {missing}，尝试 Wise...")
+        for target in missing:
+            wise_rate = fetch_wise_rate(target)
+            if wise_rate:
+                base[f'USD_{target}'] = wise_rate
+    
+    # 如果还有缺失，使用 ExchangeRate-API
+    still_missing = [target for target in ['CNY', 'HKD', 'EUR', 'GBP'] 
+                    if f'USD_{target}' not in base]
+    
+    if still_missing:
+        print(f"仍缺失 {still_missing}，尝试 ExchangeRate-API...")
+        api_rates = fetch_exchangerate_api()
+        base.update(api_rates)
+    
+    # 最终检查
+    required = ['USD_CNY', 'USD_HKD', 'USD_EUR', 'USD_GBP']
+    final_missing = [k for k in required if k not in base]
+    
+    if final_missing:
+        raise RuntimeError(f'无法获取基础汇率：{final_missing}')
+    
+    print(f"最终基础汇率：{base}")
     return base
 
-# ---------- 4. 构建交叉矩阵 ----------
-def build_matrix(b: dict) -> list:
-    u2cny, u2hkd, u2eur, u2gbp = b['USD_CNY'], b['USD_HKD'], b['USD_EUR'], b['USD_GBP']
-    fmt = lambda x: f'{x:.6f}'
-    def val(src, tgt):
-        if src == tgt: return ''
-        if src == 'USD': return fmt(b[f'USD_{tgt}'])
-        if tgt == 'USD': return fmt(1 / b[f'USD_{src}'])
-        return fmt((1 / b[f'USD_{src}']) * b[f'USD_{tgt}'])
-    m = [['Currency'] + CURRENCIES]
-    for s in CURRENCIES:
-        m.append([s] + [val(s, t) for t in CURRENCIES])
-    return m
+# ---------- 5. 构建交叉矩阵 ----------
+def build_matrix(base: dict) -> list:
+    """以 USD 为基准构建交叉汇率矩阵"""
+    fmt = lambda x: f'{x:.4f}'
+    
+    def get_rate(src: str, tgt: str) -> str:
+        if src == tgt:
+            return ''
+        if src == 'USD':
+            return fmt(base[f'USD_{tgt}'])
+        if tgt == 'USD':
+            return fmt(1 / base[f'USD_{src}'])
+        # 交叉汇率：src->USD->tgt
+        src_to_usd = 1 / base[f'USD_{src}']
+        usd_to_tgt = base[f'USD_{tgt}']
+        return fmt(src_to_usd * usd_to_tgt)
+    
+    matrix = [['Currency'] + CURRENCIES]
+    for src in CURRENCIES:
+        row = [src] + [get_rate(src, tgt) for tgt in CURRENCIES]
+        matrix.append(row)
+    
+    return matrix
 
-# ---------- 5. 写文件 ----------
-def save_csv(matrix):
+# ---------- 6. 文件保存 ----------
+def save_csv(matrix: list):
     with open('exchange_rates.csv', 'w', newline='', encoding='utf-8') as f:
         csv.writer(f).writerows(matrix)
 
-def save_json(base):
+def save_json(base: dict):
+    data = {
+        'base_rates': base,
+        'last_updated': datetime.now(timezone(timedelta(hours=8))).isoformat(),
+        'source': 'Yahoo Finance -> Wise -> ExchangeRate-API'
+    }
     with open('exchange_rates.json', 'w', encoding='utf-8') as f:
-        json.dump(
-            {'base_rates': base,
-             'last_updated': datetime.now(timezone.utc).astimezone(
-                 timezone(timedelta(hours=8))).isoformat(),
-             'source': 'Yahoo Finance → Wise fallback'},
-            f, ensure_ascii=False, indent=2)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-def save_readme(matrix):
-    ts = datetime.now(timezone.utc).astimezone(
-        timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S')
+def save_readme(matrix: list):
+    beijing_time = datetime.now(timezone(timedelta(hours=8))).strftime('%Y-%m-%d %H:%M:%S')
     lines = [
-        '# 汇率自动表（USD 基准）', '',
-        f'更新时间（北京时间）：{ts}', '',
-        '## 制表符格式，可粘贴 Excel', ''
-    ] + ['\t'.join(r) for r in matrix] + [
-        '', 'CSV：',
-        'https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv',
-        '', '> 数据来源：先 Yahoo Finance，若失败则 Wise；无更多备用。',
+        '# 汇率数据自动更新（美元基准）',
+        '',
+        f'**更新时间**：{beijing_time}（北京时间）',
+        '',
+        '## Excel 表格（制表符分隔）',
         ''
     ]
+    
+    for row in matrix:
+        lines.append('\t'.join(row))
+    
+    lines += [
+        '',
+        '## CSV 文件链接',
+        '',
+        'https://raw.githubusercontent.com/granthuang999/exchange-rate-auto/main/exchange_rates.csv',
+        '',
+        '### 数据源说明',
+        '- 优先使用 Yahoo Finance 实时汇率',
+        '- Yahoo 失败时使用 Wise 汇率',
+        '- 最后备选 ExchangeRate-API',
+        '- 以美元为基准计算所有交叉汇率',
+        '',
+        '---',
+        '*数据仅供参考，交易请以银行报价为准*'
+    ]
+    
     with open('README.md', 'w', encoding='utf-8') as f:
         f.write('\n'.join(lines))
 
-# ---------- 6. 主入口 ----------
+# ---------- 7. 主程序 ----------
 def main():
-    base = get_base_rates()
-    matrix = build_matrix(base)
-    save_csv(matrix)
-    save_json(base)
-    save_readme(matrix)
-    print('Update completed.')
+    try:
+        base = get_base_rates()
+        matrix = build_matrix(base)
+        save_csv(matrix)
+        save_json(base)
+        save_readme(matrix)
+        print('汇率数据更新成功！')
+    except Exception as e:
+        print(f'更新失败：{e}')
+        raise
 
 if __name__ == '__main__':
     main()
