@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone, timedelta
 import time
 
-CURRENCIES = ['USD', 'CNY', 'HKD', 'EUR', 'GBP']
+CURRENCIES = ['USD', 'CNY', 'HKD', 'EUR', 'GBP', 'JPY']
 
 # ---------- 1. Yahoo Finance API (免费接口) ----------
 def fetch_yahoo_rates() -> dict:
@@ -14,7 +14,8 @@ def fetch_yahoo_rates() -> dict:
         'USD_CNY': 'USDCNY=X',
         'USD_HKD': 'USDHKD=X', 
         'USD_EUR': 'USDEUR=X',
-        'USD_GBP': 'USDGBP=X'
+        'USD_GBP': 'USDGBP=X',
+        'USD_JPY': 'USDJPY=X'
     }
     
     for key, symbol in symbols.items():
@@ -98,7 +99,7 @@ def get_base_rates() -> dict:
     
     # 检查缺失的货币对，用 Wise 补充
     missing = []
-    for target in ['CNY', 'HKD', 'EUR', 'GBP']:
+    for target in ['CNY', 'HKD', 'EUR', 'GBP', 'JPY']:
         key = f'USD_{target}'
         if key not in base:
             missing.append(target)
@@ -111,7 +112,7 @@ def get_base_rates() -> dict:
                 base[f'USD_{target}'] = wise_rate
     
     # 如果还有缺失，使用 ExchangeRate-API
-    still_missing = [target for target in ['CNY', 'HKD', 'EUR', 'GBP'] 
+    still_missing = [target for target in ['CNY', 'HKD', 'EUR', 'GBP', 'JPY'] 
                     if f'USD_{target}' not in base]
     
     if still_missing:
@@ -120,7 +121,7 @@ def get_base_rates() -> dict:
         base.update(api_rates)
     
     # 最终检查
-    required = ['USD_CNY', 'USD_HKD', 'USD_EUR', 'USD_GBP']
+    required = ['USD_CNY', 'USD_HKD', 'USD_EUR', 'USD_GBP', 'USD_JPY']
     final_missing = [k for k in required if k not in base]
     
     if final_missing:
