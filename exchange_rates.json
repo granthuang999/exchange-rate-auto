@@ -1,10 +1,10 @@
 {
   "base_rates": {
-    "USD_CNY": 7.18,
-    "USD_HKD": 7.84,
-    "USD_EUR": 0.858,
+    "USD_CNY": 7.19,
+    "USD_HKD": 7.83,
+    "USD_EUR": 0.855,
     "USD_GBP": 0.738
   },
-  "last_updated": "2025-08-15T22:12:36.551619+08:00",
+  "last_updated": "2025-08-18T11:24:15.847941+08:00",
   "source": "ExchangeRate-API with USD base"
 }
