@@ -6,6 +6,6 @@
     "USD_GBP": 0.7422,
     "USD_JPY": 156.746
   },
-  "last_updated": "2026-01-01T11:43:32.819543+08:00",
+  "last_updated": "2026-01-01T22:12:37.309404+08:00",
   "source": "Yahoo Finance -> Wise -> ExchangeRate-API"
 }
