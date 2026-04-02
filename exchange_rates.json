@@ -1,11 +1,11 @@
 {
   "base_rates": {
-    "USD_CNY": 6.8852,
-    "USD_HKD": 7.837,
-    "USD_EUR": 0.8665,
-    "USD_GBP": 0.7555,
-    "USD_JPY": 159.376
+    "USD_CNY": 6.8886,
+    "USD_HKD": 7.8367,
+    "USD_EUR": 0.8656,
+    "USD_GBP": 0.7556,
+    "USD_JPY": 159.247
   },
-  "last_updated": "2026-04-02T12:22:36.085961+08:00",
+  "last_updated": "2026-04-02T22:48:17.074598+08:00",
   "source": "Yahoo Finance -> Wise -> ExchangeRate-API"
 }
